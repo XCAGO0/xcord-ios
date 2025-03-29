@@ -1,0 +1,98 @@
+workflows:
+  ios-workflow:
+    name: iOS Workflow
+    instance_type: mac_mini_m1
+    max_build_duration: 60
+    environment:
+      vars:
+        BUNDLE_ID: "com.xcago.xcord"
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Clean Git conflicts
+        script: |
+          find . -type f -name "*.dart" -exec sed -i '' -e '/^<<<<<<< HEAD$/,/^>>>>>>> /d' {} +
+          find . -type f -name "*.yaml" -exec sed -i '' -e '/^<<<<<<< HEAD$/,/^>>>>>>> /d' {} +
+          
+      - name: Clean project
+        script: |
+          flutter clean
+          rm -rf ios
+          rm -rf build
+          
+      - name: Get Flutter packages
+        script: flutter pub get
+        
+      - name: Create iOS project
+        script: |
+          flutter create . --platforms=ios
+          cd ios
+          rm -f Podfile
+          
+      - name: Set up Podfile
+        script: |
+          cd ios
+          cat > Podfile << 'EOL'
+          platform :ios, '12.0'
+          
+          ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+          
+          project 'Runner', {
+            'Debug' => :debug,
+            'Profile' => :release,
+            'Release' => :release,
+          }
+          
+          def flutter_root
+            generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+            unless File.exist?(generated_xcode_build_settings_path)
+              raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+            end
+          
+            File.foreach(generated_xcode_build_settings_path) do |line|
+              matches = line.match(/FLUTTER_ROOT\=(.*)/)
+              return matches[1].strip if matches
+            end
+            raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}"
+          end
+          
+          require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+          
+          flutter_ios_podfile_setup
+          
+          target 'Runner' do
+            use_frameworks!
+            use_modular_headers!
+          
+            flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+          end
+          
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+              end
+            end
+          end
+          EOL
+          
+      - name: Install pods
+        script: |
+          cd ios
+          pod repo update
+          pod install
+          
+      - name: Build iOS
+        script: |
+          flutter build ios --debug --no-codesign
+          
+    artifacts:
+      - build/ios/iphoneos/Runner.app
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+    publishing:
+      email:
+        recipients:
+          - xcord@xcago.com  
