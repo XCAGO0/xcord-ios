@@ -5,9 +5,7 @@ import 'screens/nuke_screen.dart';
 import 'screens/user_token_screen.dart';
 import 'screens/user_copy_server_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/username_checker_screen.dart';
 
@@ -17,31 +15,22 @@ const backgroundColor = Color(0xFF121212);
 const surfaceColor = Color(0xFF1E1E1E);
 const appBarColor = Color(0xFF1E1E1E);
 
+// تعريف متغير عام للوصول إلى Supabase
+final supabase = Supabase.instance.client;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyDzdJHG0BhmEIR4WYBWPBuM9_rprmXcqa8",
-        authDomain: "xcago-cheat.firebaseapp.com",
-        databaseURL: "https://xcago-cheat-default-rtdb.firebaseio.com",
-        projectId: "xcago-cheat",
-        storageBucket: "xcago-cheat.firebasestorage.app",
-        messagingSenderId: "617002763147",
-        appId: "1:617002763147:web:89ac6e10467bd21120658e",
-        measurementId: "G-30DXX1MVQN",
-      ),
+    await Supabase.initialize(
+      url: 'https://rlhvejslfwohwegbndge.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsaHZlanNsZndvaHdlZ2JuZGdlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyODU1MjQsImV4cCI6MjA1ODg2MTUyNH0.mS5Iqmfgh03QoIyoft_Isn3UnZriah2u-_fRjFAllkI',
     );
-    print("Firebase initialized successfully");
-    
-    // تعيين قواعد الأمان للقراءة
-    FirebaseDatabase.instance.setPersistenceEnabled(true);
-    FirebaseDatabase.instance.setPersistenceCacheSizeBytes(10000000); // 10MB
+    print("Supabase initialized successfully");
   } catch (e) {
-    print("Error initializing Firebase: $e");
+    print("Error initializing Supabase: $e");
   }
-  
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -102,181 +91,78 @@ class _UpdateCheckScreenState extends State<UpdateCheckScreen> {
     try {
       print("Checking for updates...");
       
-      // استخدام مسار login فقط للتحقق من التحديثات
-      final ref = FirebaseDatabase.instance.ref();
-      
-      // استخدام onValue للاستماع إلى التغييرات
-      ref.child('login/isupdated').onValue.listen((event) {
-        if (event.snapshot.exists) {
-          final value = event.snapshot.value.toString();
-          print("Firebase login/isupdated value: $value");
+      final response = await supabase
+        .from('app_control')
+        .select()
+        .eq('key', 'isupdated')
+        .single();
+        
+      if (response != null) {
+        final value = response['value'];
+        print("Supabase app_control/isupdated value: $value");
+        
+        setState(() {
+          _updateRequired = value == "no";
+          _isLoading = false;
+          _errorMessage = '';
+        });
+        
+        if (!_updateRequired && mounted) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
+            );
+          });
+        }
+      } else {
+        // إذا لم يتم العثور على البيانات، نحاول التحقق من loginis
+        final loginResponse = await supabase
+          .from('app_control')
+          .select()
+          .eq('key', 'loginis')
+          .single();
+          
+        if (loginResponse != null) {
+          final loginValue = loginResponse['value'];
+          print("Supabase app_control/loginis value: $loginValue");
           
           setState(() {
-            _updateRequired = value == "no";
+            _updateRequired = false;
             _isLoading = false;
             _errorMessage = '';
           });
           
-          if (!_updateRequired) {
-            // إذا لم يكن هناك تحديث مطلوب، انتقل إلى شاشة التحقق من تسجيل الدخول
-            if (mounted) {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-                );
-              });
-            }
-          } else {
-            print("Update required! Showing update message.");
+          if (mounted) {
+            Future.delayed(const Duration(milliseconds: 500), () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
+              );
+            });
           }
         } else {
-          print("Firebase path login/isupdated does not exist");
-          
-          // إذا لم يكن هناك مسار login/isupdated، تحقق من login/loginis
-          ref.child('login/loginis').onValue.listen((loginEvent) {
-            if (loginEvent.snapshot.exists) {
-              final loginValue = loginEvent.snapshot.value.toString();
-              print("Firebase login/loginis value: $loginValue");
-              
-              // إذا كانت القيمة "yes"، افترض أنه لا يوجد تحديث مطلوب
-              setState(() {
-                _updateRequired = false;
-                _isLoading = false;
-                _errorMessage = '';
-              });
-              
-              if (mounted) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-                  );
-                });
-              }
-            } else {
-              print("Firebase path login/loginis does not exist");
-              setState(() {
-                _updateRequired = false;
-                _isLoading = false;
-                _errorMessage = '';
-              });
-              
-              if (mounted) {
-                Future.delayed(const Duration(milliseconds: 500), () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-                  );
-                });
-              }
-            }
-          }, onError: (error) {
-            print("Error listening to Firebase login/loginis: $error");
-            setState(() {
-              _updateRequired = false;
-              _isLoading = false;
-              _errorMessage = 'حدث خطأ أثناء التحقق من التحديثات';
-            });
-            
-            if (mounted) {
-              Future.delayed(const Duration(seconds: 3), () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-                );
-              });
-            }
-          });
-        }
-      }, onError: (error) {
-        print("Error listening to Firebase login/isupdated: $error");
-        
-        // إذا كان هناك خطأ في الوصول إلى login/isupdated، تحقق من login/loginis
-        ref.child('login/loginis').onValue.listen((loginEvent) {
-          if (loginEvent.snapshot.exists) {
-            final loginValue = loginEvent.snapshot.value.toString();
-            print("Firebase login/loginis value: $loginValue");
-            
-            // إذا كانت القيمة "yes"، افترض أنه لا يوجد تحديث مطلوب
-            setState(() {
-              _updateRequired = false;
-              _isLoading = false;
-              _errorMessage = '';
-            });
-            
-            if (mounted) {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-                );
-              });
-            }
-          } else {
-            print("Firebase path login/loginis does not exist");
-            setState(() {
-              _updateRequired = false;
-              _isLoading = false;
-              _errorMessage = '';
-            });
-            
-            if (mounted) {
-              Future.delayed(const Duration(milliseconds: 500), () {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-                );
-              });
-            }
-          }
-        }, onError: (error) {
-          print("Error listening to Firebase login/loginis: $error");
+          print("Supabase path app_control/loginis does not exist");
           setState(() {
             _updateRequired = false;
             _isLoading = false;
-            _errorMessage = 'حدث خطأ أثناء التحقق من التحديثات';
+            _errorMessage = '';
           });
           
           if (mounted) {
-            Future.delayed(const Duration(seconds: 3), () {
+            Future.delayed(const Duration(milliseconds: 500), () {
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
               );
             });
           }
-        });
-      });
-      
-      // تعيين مهلة زمنية للتحقق من التحديثات
-      Future.delayed(const Duration(seconds: 10), () {
-        if (_isLoading && mounted) {
-          print("Update check timeout, proceeding to auth check");
-          setState(() {
-            _isLoading = false;
-            _updateRequired = false;
-            _errorMessage = 'انتهت مهلة التحقق من التحديثات';
-          });
-          
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-              );
-            }
-          });
         }
-      });
-      
+      }
     } catch (e) {
-      print("General error checking for updates: $e");
+      print("Error checking for updates: $e");
       setState(() {
         _updateRequired = false;
         _isLoading = false;
-        _errorMessage = 'حدث خطأ غير متوقع';
+        _errorMessage = 'حدث خطأ أثناء التحقق من التحديثات';
       });
-      
-      if (mounted) {
-        Future.delayed(const Duration(seconds: 3), () {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const AuthCheckScreen()),
-          );
-        });
-      }
     }
   }
 
@@ -491,13 +377,11 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
 
   Future<void> _checkLoginRequirement() async {
     try {
-      // أولاً، تحقق مما إذا كان المستخدم قد سجل الدخول بالفعل وما زالت الجلسة صالحة
       final prefs = await SharedPreferences.getInstance();
       final lastLoginTime = prefs.getInt('lastLoginTime') ?? 0;
       final currentTime = DateTime.now().millisecondsSinceEpoch;
       final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
       
-      // التحقق من صلاحية الجلسة (4 أيام = 345600000 مللي ثانية)
       final sessionValid = isLoggedIn && (currentTime - lastLoginTime < 345600000);
       
       if (sessionValid) {
@@ -508,22 +392,16 @@ class _AuthCheckScreenState extends State<AuthCheckScreen> {
         return;
       }
       
-      // إذا لم تكن الجلسة صالحة، تحقق من قيمة loginis في Firebase
-      final ref = FirebaseDatabase.instance.ref();
-      final snapshot = await ref.child('login/loginis').get();
-      
-      if (snapshot.exists) {
-        final value = snapshot.value.toString();
-        print("Firebase login/loginis value: $value");
+      final response = await supabase
+        .from('app_control')
+        .select()
+        .eq('key', 'loginis')
+        .single();
         
+      if (response != null) {
+        final value = response['value'];
         setState(() {
           _requireLogin = value == "yes";
-          _isLoading = false;
-        });
-      } else {
-        print("Firebase path login/loginis does not exist");
-        setState(() {
-          _requireLogin = false;
           _isLoading = false;
         });
       }
@@ -608,76 +486,30 @@ class _LoginScreenState extends State<LoginScreen> {
         final email = _emailController.text.trim();
         final password = _passwordController.text.trim();
         
-        print("Attempting to sign in with email: $email");
-        
-        // حل مشكلة PigeonUserDetails
-        try {
-          // استخدام طريقة مختلفة للتعامل مع تسجيل الدخول
-          await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
-          
-          // إذا نجح تسجيل الدخول، قم بتخزين حالة تسجيل الدخول ووقت تسجيل الدخول
+        final response = await supabase.auth.signInWithPassword(
+          email: email,
+          password: password,
+        );
+
+        if (response.user != null) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('isLoggedIn', true);
           await prefs.setInt('lastLoginTime', DateTime.now().millisecondsSinceEpoch);
           
-          // انتقل إلى الشاشة الرئيسية
           if (mounted) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (context) => const MainScreen()),
             );
           }
-        } catch (e) {
-          print("Firebase auth error: $e");
-          
-          // تجاهل خطأ PigeonUserDetails والمتابعة
-          if (e.toString().contains('PigeonUserDetails')) {
-            // تحقق مما إذا كان المستخدم قد سجل الدخول بنجاح على الرغم من الخطأ
-            final currentUser = FirebaseAuth.instance.currentUser;
-            if (currentUser != null) {
-              // المستخدم مسجل الدخول بنجاح على الرغم من الخطأ
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('isLoggedIn', true);
-              await prefs.setInt('lastLoginTime', DateTime.now().millisecondsSinceEpoch);
-              
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const MainScreen()),
-                );
-              }
-              return;
-            }
-          }
-          
-          // إذا كان هناك خطأ آخر، عرض رسالة الخطأ
-          setState(() {
-            _isLoading = false;
-            if (e is FirebaseAuthException) {
-              if (e.code == 'user-not-found') {
-                _errorMessage = 'لم يتم العثور على مستخدم بهذا البريد الإلكتروني';
-              } else if (e.code == 'wrong-password') {
-                _errorMessage = 'كلمة المرور غير صحيحة';
-              } else if (e.code == 'invalid-email') {
-                _errorMessage = 'البريد الإلكتروني غير صالح';
-              } else if (e.code == 'user-disabled') {
-                _errorMessage = 'تم تعطيل هذا الحساب';
-              } else if (e.code == 'too-many-requests') {
-                _errorMessage = 'محاولات كثيرة للدخول، يرجى المحاولة لاحقاً';
-              } else {
-                _errorMessage = 'خطأ في تسجيل الدخول: ${e.message}';
-              }
-            } else {
-              _errorMessage = 'خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
-            }
-          });
         }
       } catch (e) {
-        print("General error: $e");
         setState(() {
           _isLoading = false;
-          _errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
+          if (e is AuthException) {
+            _errorMessage = e.message;
+          } else {
+            _errorMessage = 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.';
+          }
         });
       }
     }
@@ -927,24 +759,22 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _checkLoginSystem() async {
     try {
-      final ref = FirebaseDatabase.instance.ref();
-      ref.child('login/loginis').onValue.listen((event) {
-        if (event.snapshot.exists) {
-          final value = event.snapshot.value.toString();
-          print("Firebase login/loginis value: $value");
-          
-          setState(() {
-            _showLogoutButton = value == "yes";
-          });
-        }
-      }, onError: (error) {
-        print("Error checking login system: $error");
+      final response = await supabase
+        .from('app_control')
+        .select()
+        .eq('key', 'loginis')
+        .single();
+      
+      if (response != null) {
+        final value = response['value'];
+        print("Supabase app_control/loginis value: $value");
+        
         setState(() {
-          _showLogoutButton = false;
+          _showLogoutButton = value == "yes";
         });
-      });
+      }
     } catch (e) {
-      print("General error checking login system: $e");
+      print("Error checking login system: $e");
       setState(() {
         _showLogoutButton = false;
       });
@@ -1136,7 +966,7 @@ class _MainScreenState extends State<MainScreen> {
                     style: GoogleFonts.cairo(color: Colors.white),
                   ),
                   onTap: () async {
-                    await FirebaseAuth.instance.signOut();
+                    await supabase.auth.signOut();
                     final prefs = await SharedPreferences.getInstance();
                     await prefs.setBool('isLoggedIn', false);
                     if (mounted) {
