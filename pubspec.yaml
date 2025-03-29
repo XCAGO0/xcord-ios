@@ -15,15 +15,13 @@ dependencies:
   shared_preferences: ^2.2.2
   provider: ^6.1.1
   url_launcher: ^6.1.10
-  firebase_core: ^2.15.1
-  firebase_auth: ^4.7.3
-  firebase_database: ^10.2.5
-  firebase_analytics: ^10.4.5
+  supabase_flutter: ^2.3.4
+  supabase: ^2.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.3
+  flutter_lints: ^2.0.0
   flutter_launcher_icons: ^0.13.1
 
 flutter:
@@ -42,7 +40,7 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "images/xxicon.png"
-  min_sdk_android: 21
-  adaptive_icon_background: "#121212"
-  adaptive_icon_foreground: "images/xxicon.png"
+  min_sdk_android: 21 # android min sdk min:16, default 21
+  adaptive_icon_background: "#121212" # فقط للأندرويد
+  adaptive_icon_foreground: "images/xxicon.png" # فقط للأندرويد
   remove_alpha_ios: true
